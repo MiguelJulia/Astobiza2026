@@ -1,0 +1,423 @@
+---
+title: "Ranalysis_allsamples"
+author: "Miguel Juliá"
+date: "`r Sys.Date()`"
+output: html_document
+params:
+  args: ''
+---
+
+```{r setup, include=FALSE}
+# conda activate Seurat
+# Rscript -e "rmarkdown::render('01_Ranalisys_allsamples.Rmd')"
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load environment
+
+Set input file names for each sample to analyse.
+
+```{r environment}
+library(Seurat)
+library(ggplot2)
+library(SingleR) 
+library(dplyr)
+library(celldex) ## This is only available with R>=4.0, so loading pregenerated data object hpca.ref instead
+library(RColorBrewer)
+library(SingleCellExperiment)
+library(hdf5r)
+
+setwd("/path/to/working/directory/scRNAseq_test/Chen_2020/postanalysis")
+# load("hpca.ref.RData")
+
+## Comemnted out samples could not be analysed with my current 64GB of RAM
+# samples <- c("HRI040891", "HRI040892", "HRI040893", "HRI040894", "HRI040895", "HRI040896", "HRI040897", "HRI040898", "HRI040899", "HRI040900", "HRI040901")
+samples <- c("HRI040891", "HRI040892", "HRI040894", "HRI040895", "HRI040897", "HRI040899", "HRI040901")
+
+# names <- c("BC1", "BC2", "BC3", "BC4", "BC5", "BC6", "BC7", "BC8", "Mucosa1", "Mucosa2", "Mucosa3")
+names <- c("BC1", "BC2", "BC4", "BC5", "BC7", "Mucosa1", "Mucosa3")
+
+file_HRI040891 <- "../analysis_1/cellranger/count/sample-HRI040891/outs/filtered_feature_bc_matrix.h5"
+file_HRI040892 <- "../analysis_1/cellranger/count/sample-HRI040892/outs/filtered_feature_bc_matrix.h5"
+# file_HRI040893 <- "../analysis_1/cellranger/count/sample-HRI040893/outs/filtered_feature_bc_matrix.h5"
+file_HRI040894 <- "../analysis_1/cellranger/count/sample-HRI040894/outs/filtered_feature_bc_matrix.h5"
+file_HRI040895 <- "../analysis_1/cellranger/count/sample-HRI040895/outs/filtered_feature_bc_matrix.h5"
+# file_HRI040896 <- "../analysis_1/cellranger/count/sample-HRI040896/outs/filtered_feature_bc_matrix.h5"
+file_HRI040897 <- "../analysis_1/cellranger/count/sample-HRI040897/outs/filtered_feature_bc_matrix.h5"
+# file_HRI040898 <- "../analysis_1/cellranger/count/sample-HRI040898/outs/filtered_feature_bc_matrix.h5"
+file_HRI040899 <- "../analysis_1/cellranger/count/sample-HRI040899/outs/filtered_feature_bc_matrix.h5"
+# file_HRI040900 <- "../analysis_1/cellranger/count/sample-HRI040900/outs/filtered_feature_bc_matrix.h5"
+file_HRI040901 <- "../analysis_1/cellranger/count/sample-HRI040901/outs/filtered_feature_bc_matrix.h5"
+
+```
+
+## Find clusters and celtype per sample
+
+Each sample is loaded and processed:
+
+- mitocondrial and ribosomal fraction of reads
+- normalization and dimensionality reduction
+- cellcycle normalisation
+- SCTransform normalization and clustering
+- Cell type annotation using SingleR
+
+<!-- ```{r load and process, eval=F} -->
+<!-- for (i in 1:length(samples) ){ -->
+
+<!--   file <- get(paste0("file_", samples[i])) -->
+<!--   sample_name <- names[i] -->
+
+<!--   print(paste0("PROCESSING SAMPLE ", names[i])) -->
+
+<!--   # load the count matrices -->
+<!--   counts <- Seurat::Read10X_h5(file, use.names = F) -->
+<!--   gene_names <- rownames(Seurat::Read10X_h5(file)) -->
+
+<!--   adj.matrix <- Read10X_h5(file) -->
+<!--   srat <- CreateSeuratObject(adj.matrix, project = sample_name)  -->
+<!--   adj.matrix <- NULL -->
+<!--   srat -->
+
+<!--   meta <- srat@meta.data -->
+<!--   summary(meta$nCount_RNA) -->
+<!--   summary(meta$nFeature_RNA) -->
+
+<!--   # Add mitocondrial and ribosomal fraction of reads -->
+<!--   srat[["percent.mt"]] <- PercentageFeatureSet(srat, pattern = "^MT-") -->
+<!--   srat[["percent.rb"]] <- PercentageFeatureSet(srat, pattern = "^RP[SL]") -->
+<!--   srat[[]] -->
+<!--   VlnPlot(srat, features = c("nFeature_RNA","nCount_RNA","percent.mt","percent.rb"),ncol = 4,pt.size = 0.1)  -->
+<!--   FeatureScatter(srat, feature1 = "nCount_RNA", feature2 = "percent.mt") -->
+<!--   FeatureScatter(srat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") -->
+<!--   FeatureScatter(srat, feature1 = "nCount_RNA", feature2 = "percent.rb") -->
+<!--   FeatureScatter(srat, feature1 = "percent.rb", feature2 = "percent.mt") -->
+
+<!--   # Normalization and dimensionality reduction -->
+<!--   srat <- NormalizeData(srat) -->
+<!--   srat <- FindVariableFeatures(srat, selection.method = "vst", nfeatures = 2000) -->
+<!--   top10 <- head(VariableFeatures(srat), 10) -->
+<!--   top10  -->
+<!--   plot1 <- VariableFeaturePlot(srat) -->
+<!--   LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0, ynudge = 0) -->
+
+<!--   all.genes <- rownames(srat) -->
+<!--   srat <- ScaleData(srat, features = all.genes) -->
+<!--   srat <- RunPCA(srat, features = VariableFeatures(object = srat)) -->
+<!--   VizDimLoadings(srat, dims = 1:9, reduction = "pca") -->
+<!--   DimHeatmap(srat, dims = 1:6, nfeatures = 20, cells = 500, balanced = T) -->
+<!--   DimPlot(srat, reduction = "pca") -->
+<!--   ElbowPlot(srat) -->
+
+<!--   srat <- FindNeighbors(srat, dims = 1:10) -->
+<!--   srat <- FindClusters(srat, resolution = 0.5) -->
+<!--   srat <- RunUMAP(srat, dims = 1:10, verbose = F) -->
+<!--   table(srat@meta.data$seurat_clusters) -->
+<!--   DimPlot(srat,label.size = 4,repel = T,label = T) -->
+
+<!--   # # Visualise gene expression -->
+<!--   # FeaturePlot(srat, features = "percent.mt")  -->
+<!--   # FeaturePlot(srat, features = "nFeature_RNA") -->
+<!--   # FeaturePlot(srat, features = c("LILRA4", "TPM2", "PPBP", "GP1BB")) -->
+
+<!--   # Cellcycle -->
+<!--   s.genes <- cc.genes.updated.2019$s.genes -->
+<!--   g2m.genes <- cc.genes.updated.2019$g2m.genes -->
+
+<!--   srat <- CellCycleScoring(srat, s.features = s.genes, g2m.features = g2m.genes) -->
+<!--   table(srat[[]]$Phase) -->
+
+<!--   # SCTransform normalization and clustering -->
+<!--   srat <- SCTransform(srat, method = "glmGamPoi", ncells = 8824,  -->
+<!--                       vars.to.regress = c("percent.mt","S.Score","G2M.Score"), verbose = F) -->
+<!--   srat <- RunPCA(srat, verbose = F) -->
+<!--   srat <- RunUMAP(srat, dims = 1:30, verbose = F) -->
+<!--   srat <- FindNeighbors(srat, dims = 1:30, verbose = F) -->
+<!--   srat <- FindClusters(srat, verbose = F) -->
+<!--   table(srat[[]]$seurat_clusters) -->
+<!--   DimPlot(srat, label = T) -->
+
+<!--   all.markers <- FindAllMarkers(srat, only.pos = T, min.pct = 0.5, logfc.threshold = 0.5) -->
+<!--   dim(all.markers) -->
+<!--   table(all.markers$cluster) -->
+
+<!--   top3_markers <- as.data.frame(all.markers %>% group_by(cluster) %>% top_n(n = 3, wt = avg_log2FC)) -->
+<!--   top3_markers -->
+<!--   write.table(as.data.frame(AverageExpression(object = srat, return.seurat = F)$RNA), sep = "\t", col.names = T, row.names = T, file = "AverageExpression.tsv") -->
+
+<!--   # Cell type annotation using SingleR -->
+<!--   hpca.ref <- celldex::HumanPrimaryCellAtlasData() -->
+<!--   sce <- as.SingleCellExperiment(DietSeurat(srat)) -->
+<!--   sce -->
+<!--   hpca.main <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.main) -->
+<!--   hpca.fine <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.fine) -->
+<!--   table(hpca.main$pruned.labels) -->
+<!--   table(hpca.fine$pruned.labels) -->
+<!--   srat@meta.data$hpca.main   <- hpca.main$pruned.labels -->
+<!--   srat@meta.data$hpca.fine   <- hpca.fine$pruned.labels -->
+
+<!--   srat <- SetIdent(srat, value = "hpca.main") -->
+<!--   DimPlot(srat, label = T , repel = T, label.size = 3) + NoLegend() -->
+
+<!--   srat <- SetIdent(srat, value = "hpca.fine") -->
+<!--   DimPlot(srat, label = T , repel = T, label.size = 3) + NoLegend() -->
+
+<!--   # Save variables -->
+<!--   assign(paste0("srat_", sample_name), srat) -->
+
+<!--   # Free RAM -->
+<!--   rm(counts) -->
+<!--   rm(meta) -->
+<!--   rm(gene_names) -->
+<!--   rm(sce) -->
+<!--   rm(srat) -->
+
+<!-- } -->
+
+<!-- # Save results -->
+<!-- # save.image("01_Ranalysis_srat.RData")   -->
+
+<!-- ``` -->
+
+
+## Define clusters for Fibroblasts and merge all datasets together
+
+```{r define clusters and merge, echo=T}
+
+load("01_Ranalysis_srat.RData")
+
+srat_BC1 <- SetIdent(srat_BC1, value = "hpca.main")
+srat_BC1 <- subset(srat_BC1, subset = !is.na(hpca.main))
+srat_BC1 <- subset(srat_BC1, idents = levels(srat_BC1$hpca.main)[!is.na(levels(srat_BC1$hpca.main))])
+DimPlot(srat_BC1, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Tissue types BC1')
+list_fibroblasts <- WhichCells(srat_BC1, idents = c( "Fibroblasts"))
+DimPlot(srat_BC1, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey") + NoLegend()
+srat_BC1 <- SetIdent(srat_BC1, value = "seurat_clusters")
+DimPlot(srat_BC1, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Seurat clusters BC1')
+srat_BC1_select <- subset(x = srat_BC1, ident = c(11, 19, 20, 24, 25))
+
+srat_BC2 <- SetIdent(srat_BC2, value = "hpca.main")
+srat_BC2 <- subset(srat_BC2, subset = !is.na(hpca.main))
+srat_BC2 <- subset(srat_BC2, idents = levels(srat_BC2$hpca.main)[!is.na(levels(srat_BC2$hpca.main))])
+DimPlot(srat_BC2, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Tissue types BC2')
+list_fibroblasts <- WhichCells(srat_BC2, idents = c( "Fibroblasts"))
+DimPlot(srat_BC2, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey") + NoLegend()
+srat_BC2 <- SetIdent(srat_BC2, value = "seurat_clusters")
+DimPlot(srat_BC2, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Seurat clusters BC2')
+srat_BC2_select <- subset(x = srat_BC2, ident = c(7, 11, 14, 24))
+
+srat_BC4 <- SetIdent(srat_BC4, value = "hpca.main")
+srat_BC4 <- subset(srat_BC4, subset = !is.na(hpca.main))
+srat_BC4 <- subset(srat_BC4, idents = levels(srat_BC4$hpca.main)[!is.na(levels(srat_BC4$hpca.main))])
+DimPlot(srat_BC4, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Tissue types BC4')
+list_fibroblasts <- WhichCells(srat_BC4, idents = c( "Fibroblasts"))
+DimPlot(srat_BC4, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey") + NoLegend()
+srat_BC4 <- SetIdent(srat_BC4, value = "seurat_clusters")
+DimPlot(srat_BC4, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Seurat clusters BC4')
+srat_BC4_select <- subset(x = srat_BC4, ident = c(2, 17, 19, 21))
+
+srat_BC5 <- SetIdent(srat_BC5, value = "hpca.main")
+srat_BC5 <- subset(srat_BC5, subset = !is.na(hpca.main))
+srat_BC5 <- subset(srat_BC5, idents = levels(srat_BC5$hpca.main)[!is.na(levels(srat_BC5$hpca.main))])
+DimPlot(srat_BC5, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Tissue types BC5')
+list_fibroblasts <- WhichCells(srat_BC5, idents = c( "Fibroblasts"))
+DimPlot(srat_BC5, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey") + NoLegend()
+srat_BC5 <- SetIdent(srat_BC5, value = "seurat_clusters")
+DimPlot(srat_BC5, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Seurat clusters BC5')
+srat_BC5_select <- subset(x = srat_BC5, ident = c(9, 12))
+
+srat_BC7 <- SetIdent(srat_BC7, value = "hpca.main")
+srat_BC7 <- subset(srat_BC7, subset = !is.na(hpca.main))
+srat_BC7 <- subset(srat_BC7, idents = levels(srat_BC7$hpca.main)[!is.na(levels(srat_BC7$hpca.main))])
+DimPlot(srat_BC7, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Tissue types BC7')
+list_fibroblasts <- WhichCells(srat_BC7, idents = c( "Fibroblasts"))
+DimPlot(srat_BC7, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey") + NoLegend()
+srat_BC7 <- SetIdent(srat_BC7, value = "seurat_clusters")
+DimPlot(srat_BC7, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Seurat clusters BC7')
+srat_BC7_select <- subset(x = srat_BC7, ident = c(10, 11, 14))
+
+srat_Mucosa1 <- SetIdent(srat_Mucosa1, value = "hpca.main")
+srat_Mucosa1 <- subset(srat_Mucosa1, subset = !is.na(hpca.main))
+srat_Mucosa1 <- subset(srat_Mucosa1, idents = levels(srat_Mucosa1$hpca.main)[!is.na(levels(srat_Mucosa1$hpca.main))])
+DimPlot(srat_Mucosa1, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Tissue types Mucosa1')
+list_fibroblasts <- WhichCells(srat_Mucosa1, idents = c( "Fibroblasts"))
+DimPlot(srat_Mucosa1, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey") + NoLegend()
+srat_Mucosa1 <- SetIdent(srat_Mucosa1, value = "seurat_clusters")
+DimPlot(srat_Mucosa1, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Seurat clusters Mucosa1')
+srat_Mucosa1_select <- subset(x = srat_Mucosa1, ident = c(7, 11, 13, 16, 21))
+
+srat_Mucosa3 <- SetIdent(srat_Mucosa3, value = "hpca.main")
+srat_Mucosa3 <- subset(srat_Mucosa3, subset = !is.na(hpca.main))
+srat_Mucosa3 <- subset(srat_Mucosa3, idents = levels(srat_Mucosa3$hpca.main)[!is.na(levels(srat_Mucosa3$hpca.main))])
+DimPlot(srat_Mucosa3, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Tissue types Mucosa3')
+list_fibroblasts <- WhichCells(srat_Mucosa3, idents = c( "Fibroblasts"))
+DimPlot(srat_Mucosa3, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey") + NoLegend()
+srat_Mucosa3 <- SetIdent(srat_Mucosa3, value = "seurat_clusters")
+DimPlot(srat_Mucosa3, label = T , repel = T, label.size = 3) + NoLegend() + ggtitle('Seurat clusters Mucosa3')
+srat_Mucosa3_select <- subset(x = srat_Mucosa3, ident = c(2, 3, 10, 21))
+
+srat_select <- merge(srat_BC1_select, y = c(srat_BC2_select, srat_BC4_select, srat_BC5_select, srat_BC7_select, srat_Mucosa1_select, srat_Mucosa3_select), add.cell.ids = names, project = "bladder")
+  
+```
+
+## Differential expression
+
+```{r integrate with seurat, echo=T}
+
+options(future.globals.maxSize = 20 * 1024^3) # 20 GiB
+future::plan("multicore", workers = 4)        # Or "sequential" if memory is low
+
+integration_features <- SelectIntegrationFeatures(object.list=c(srat_BC1_select, srat_BC2_select, srat_BC4_select, srat_BC5_select, srat_BC7_select, srat_Mucosa1_select, srat_Mucosa3_select))
+
+srat.anchors <- FindIntegrationAnchors(object.list = c(srat_BC1_select, srat_BC2_select, srat_BC4_select, srat_BC5_select, srat_BC7_select, srat_Mucosa1_select, srat_Mucosa3_select), anchor.features = integration_features)
+
+# this command creates an 'integrated' data assay
+srat.combined <- IntegrateData(anchorset = srat.anchors)
+
+# specify that we will perform downstream analysis on the corrected data note that the
+# original unmodified data still resides in the 'RNA' assay
+DefaultAssay(srat.combined) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+srat.combined <- ScaleData(srat.combined, verbose = FALSE)
+srat.combined <- RunPCA(srat.combined, npcs = 30, verbose = FALSE)
+srat.combined <- RunUMAP(srat.combined, reduction = "pca", dims = 1:30)
+srat.combined <- FindNeighbors(srat.combined, reduction = "pca", dims = 1:30)
+srat.combined <- FindClusters(srat.combined, resolution = 0.5)
+
+DimPlot(srat.combined, reduction = "umap", label = TRUE, repel = TRUE)
+
+```
+
+```{r, echo=T}
+
+# Cell type annotation using SingleR
+hpca.ref <- celldex::HumanPrimaryCellAtlasData()
+sce <- as.SingleCellExperiment(DietSeurat(srat.combined))
+sce
+hpca.main <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.main)
+hpca.fine <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.fine)
+table(hpca.main$pruned.labels)
+table(hpca.fine$pruned.labels)
+srat.combined@meta.data$hpca.main   <- hpca.main$pruned.labels
+srat.combined@meta.data$hpca.fine   <- hpca.fine$pruned.labels
+
+srat.combined <- SetIdent(srat.combined, value = "hpca.main")
+srat.combined <- subset(srat.combined, subset = !is.na(hpca.main))
+srat.combined <- subset(srat.combined, idents = levels(srat.combined$hpca.main)[!is.na(levels(srat.combined$hpca.main))])
+DimPlot(srat.combined, label = T , repel = T, label.size = 3) + ggtitle('Tissue types Fibrolasts all')
+
+srat.combined <- SetIdent(srat.combined, value = "hpca.main")
+list_fibroblasts <- WhichCells(srat.combined, idents = c( "Fibroblasts"))
+DimPlot(srat.combined, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey")
+
+srat.combined <- SetIdent(srat.combined, value = "orig.ident")
+DimPlot(srat.combined, label = T , repel = T, label.size = 3) + ggtitle('Sample origin Fibrolasts all')
+
+orig.tumour <- srat.combined@meta.data$orig.ident
+orig.tumour[orig.tumour=="BC1"] <- "Tumour"
+orig.tumour[orig.tumour=="BC2"] <- "Tumour"
+orig.tumour[orig.tumour=="BC4"] <- "Tumour"
+orig.tumour[orig.tumour=="BC5"] <- "Tumour"
+orig.tumour[orig.tumour=="BC7"] <- "Tumour"
+orig.tumour[orig.tumour=="Mucosa1"] <- "Mucose"
+orig.tumour[orig.tumour=="Mucosa3"] <- "Mucose"
+
+srat.combined@meta.data$orig.tumour <- orig.tumour
+srat.combined <- SetIdent(srat.combined, value = "orig.tumour")
+DimPlot(srat.combined, label = T , repel = T, label.size = 3) + ggtitle('Tumour state Fibrolasts all')
+
+```
+
+
+```{r, echo=T}
+
+integration_features <- SelectIntegrationFeatures(object.list=c(srat_BC1_select, srat_BC2_select, srat_BC4_select, srat_BC5_select, srat_BC7_select, srat_Mucosa1_select, srat_Mucosa3_select))
+VariableFeatures(srat_select) <- integration_features
+
+srat_select <- NormalizeData(srat_select)
+# srat_select <- FindVariableFeatures(srat_select, selection.method = "vst", nfeatures = 2000)
+# top10 <- head(VariableFeatures(srat_select), 10)
+# top10
+# plot1 <- VariableFeaturePlot(srat_select)
+# LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0, ynudge = 0)
+
+all.genes <- rownames(srat_select)
+srat_select <- ScaleData(srat_select, features = all.genes)
+srat_select <- RunPCA(srat_select, features = VariableFeatures(object = srat_select))
+VizDimLoadings(srat_select, dims = 1:9, reduction = "pca")
+DimHeatmap(srat_select, dims = 1:6, nfeatures = 20, cells = 500, balanced = T)
+DimPlot(srat_select, reduction = "pca")
+ElbowPlot(srat_select)
+
+srat_select <- FindNeighbors(srat_select, dims = 1:10)
+srat_select <- FindClusters(srat_select, resolution = 0.5)
+srat_select <- RunUMAP(srat_select, dims = 1:10, verbose = F)
+table(srat_select@meta.data$seurat_clusters)
+DimPlot(srat_select,label.size = 4,repel = T,label = T)
+
+s.genes <- cc.genes.updated.2019$s.genes
+g2m.genes <- cc.genes.updated.2019$g2m.genes
+
+srat_select <- CellCycleScoring(srat_select, s.features = s.genes, g2m.features = g2m.genes)
+table(srat_select[[]]$Phase)
+
+options(future.globals.maxSize = 8000 * 1024^2)
+srat_select <- SCTransform(srat_select, method = "glmGamPoi", ncells = 8824, 
+                                vars.to.regress = c("percent.mt","S.Score","G2M.Score"), verbose = F)
+srat_select <- RunPCA(srat_select, verbose = F)
+srat_select <- RunUMAP(srat_select, dims = 1:30, verbose = F)
+srat_select <- FindNeighbors(srat_select, dims = 1:30, verbose = F)
+srat_select <- FindClusters(srat_select, verbose = F)
+table(srat_select[[]]$seurat_clusters)
+DimPlot(srat_select, label = T) + ggtitle('Clusters Fibrolasts all')
+
+all.markers_select <- FindAllMarkers(srat_select, only.pos = T, min.pct = 0.5, logfc.threshold = 0.5)
+dim(all.markers_select)
+table(all.markers_select$cluster)
+
+top3_markers_select <- as.data.frame(all.markers_select %>% group_by(cluster) %>% top_n(n = 3, wt = avg_log2FC))
+top3_markers_select
+write.table(as.data.frame(AverageExpression(object = srat_select, return.seurat = F)$RNA), sep = "\t", col.names = T, row.names = T, file = "AverageExpression__all_clusters.tsv")
+
+# Cell type annotation using SingleR
+hpca.ref <- celldex::HumanPrimaryCellAtlasData()
+sce <- as.SingleCellExperiment(DietSeurat(srat_select))
+sce
+hpca.main <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.main)
+hpca.fine <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.fine)
+table(hpca.main$pruned.labels)
+table(hpca.fine$pruned.labels)
+srat_select@meta.data$hpca.main   <- hpca.main$pruned.labels
+srat_select@meta.data$hpca.fine   <- hpca.fine$pruned.labels
+
+srat_select <- SetIdent(srat_select, value = "hpca.main")
+srat_select <- subset(srat_select, subset = !is.na(hpca.main))
+srat_select <- subset(srat_select, idents = levels(srat_select$hpca.main)[!is.na(levels(srat_select$hpca.main))])
+DimPlot(srat_select, label = T , repel = T, label.size = 3) + ggtitle('Tissue types Fibrolasts all')
+  
+```
+
+```{r, echo=T}
+
+srat_select <- SetIdent(srat_select, value = "hpca.main")
+list_fibroblasts <- WhichCells(srat_select, idents = c( "Fibroblasts"))
+DimPlot(srat_select, label=T, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey")
+
+srat_select <- SetIdent(srat_select, value = "orig.ident")
+DimPlot(srat_select, label = T , repel = T, label.size = 3) + ggtitle('Sample origin Fibrolasts all')
+
+orig.tumour <- srat_select@meta.data$orig.ident
+orig.tumour[orig.tumour=="BC1"] <- "Tumour"
+orig.tumour[orig.tumour=="BC2"] <- "Tumour"
+orig.tumour[orig.tumour=="BC4"] <- "Tumour"
+orig.tumour[orig.tumour=="BC5"] <- "Tumour"
+orig.tumour[orig.tumour=="BC7"] <- "Tumour"
+orig.tumour[orig.tumour=="Mucosa1"] <- "Mucose"
+orig.tumour[orig.tumour=="Mucosa3"] <- "Mucose"
+
+srat_select@meta.data$orig.tumour <- orig.tumour
+srat_select <- SetIdent(srat_select, value = "orig.tumour")
+DimPlot(srat_select, label = T , repel = T, label.size = 3) + ggtitle('Tumour state Fibrolasts all')
+
+```
+

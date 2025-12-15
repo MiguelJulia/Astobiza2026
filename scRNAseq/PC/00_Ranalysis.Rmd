@@ -1,0 +1,354 @@
+---
+title: "Full analysis"
+author: "Miguel Juliá"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r load libraries}
+suppressMessages({
+library(splatter)
+library(Seurat)
+library(msigdbr)
+library(singleseqgset)
+library(heatmap3)
+library(GEOquery)
+library(Seurat) 
+library(scater)
+library(SingleCellExperiment)
+library(viridisLite)
+library(viridis)
+library(clustree)
+library(MAST)
+library(destiny)
+# library(ggbeeswarm)
+library(ggthemes)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(stringr)
+library(colorRamps)
+library(colorRamps)
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(singleseqgset)
+library(devtools)
+library(zellkonverter)
+library(knitr)
+library(harmony)
+library(SingleR) 
+library(celldex)
+})
+```
+
+```{r}
+set.seed(101100)
+```
+
+Set working directory
+```{r}
+
+wd <- "/path/to/working/directory/Fibroblasts_IanireAstobiza"
+setwd(wd)
+data.folder <- file.path(wd)
+```
+
+Load data
+```{r}
+
+file <- "Annotation_Manual_Miguel_AC55_BPH.rds"
+srat <- readRDS(file=file.path(data.folder, file))
+```
+
+Identify fibroblasts
+```{r}
+
+srat <- SetIdent(srat, value = "seurat_clusters")
+DimPlot(srat, label = TRUE, repel = TRUE) + theme(legend.position="none")
+
+srat <- SetIdent(srat, value = "annotation")
+DimPlot(srat, label = T , repel = T, label.size = 3) + ggtitle('Annotation') + theme(legend.position="none")
+
+srat <- SetIdent(srat, value = "orig.ident")
+DimPlot(srat, label = T , repel = T, label.size = 3) + ggtitle('Sample origin') + theme(legend.position="none")
+
+srat <- SetIdent(srat, value = "DF")
+DimPlot(srat, label = T , repel = T, label.size = 3) + ggtitle('Doublets') + theme(legend.position="none")
+
+# Assign mycelltype
+srat <- SetIdent(srat, value = "annotation")
+tmp <- as.character(srat$annotation)
+tmp[ as.character(srat$annotation) == "3_Fibroblasts - Pericytes" ] <- "fibroblast"
+tmp[ as.character(srat$annotation) == "4_Fibroblasts - Pericytes" ] <- "fibroblast"
+srat$mycelltype <- tmp
+rm(tmp)
+srat <- SetIdent(srat, value = "mycelltype")
+DimPlot(srat, label = T , repel = T, label.size = 3) + ggtitle('mycelltype') + theme(legend.position="none")
+DimPlot(srat, label=F, cells.highlight= list(WhichCells(srat, idents = c( "fibroblast"))), cols.highlight = c("darkblue"), cols= "grey")
+
+# Assign Fer's celltype classification
+srat <- SetIdent(srat, value = "seurat_clusters")
+tmp <- rep("NA", length(srat$seurat_clusters))
+tmp[ srat$seurat_clusters == 0 ] <- "T/NK cell"
+tmp[ srat$seurat_clusters == 1 ] <- "myeloid"
+tmp[ srat$seurat_clusters == 2 ] <- "endothelial"
+tmp[ srat$seurat_clusters == 3 ] <- "fibroblast"
+tmp[ srat$seurat_clusters == 4 ] <- "fibroblast"
+tmp[ srat$seurat_clusters == 5 ] <- "epithelial"
+tmp[ srat$seurat_clusters == 6 ] <- "epithelial"
+tmp[ srat$seurat_clusters == 7 ] <- "epithelial"
+tmp[ srat$seurat_clusters == 8 ] <- "endothelial"
+tmp[ srat$seurat_clusters == 9 ] <- "myeloid"
+tmp[ srat$seurat_clusters == 10 ] <- "B cell"
+tmp[ srat$seurat_clusters == 11 ] <- "epithelial"
+tmp[ srat$seurat_clusters == 12 ] <- "epithelial"
+tmp[ srat$seurat_clusters == 13 ] <- "mastocytes"
+tmp[ srat$seurat_clusters == 14 ] <- "epithelial"
+tmp[ srat$seurat_clusters == 15 ] <- "epithelial"
+tmp[ srat$seurat_clusters == 16 ] <- "NA"
+tmp[ srat$seurat_clusters == 17 ] <- "NA"
+tmp[ srat$seurat_clusters == 18 ] <- "NA"
+tmp[ srat$seurat_clusters == 19 ] <- "fibroblast"
+tmp[ srat$seurat_clusters == 20 ] <- "endothelial"
+srat$fer_classification <- as.factor(tmp)
+rm(tmp)
+srat <- SetIdent(srat, value = "fer_classification")
+DimPlot(srat, label = F , repel = T, label.size = 3) + ggtitle('fer_classification') + theme(legend.position="none")
+DimPlot(srat, label=F, cells.highlight= list(WhichCells(srat, idents = c( "fibroblast"))), cols.highlight = c("darkblue"), cols= "grey")
+
+# Cell type annotation using SingleR
+srat <- SetIdent(srat, value = "seurat_clusters")
+hpca.ref <- celldex::HumanPrimaryCellAtlasData()
+sce <- as.SingleCellExperiment(DietSeurat(srat))
+sce
+hpca.main <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.main)
+hpca.fine <- SingleR(test = sce,assay.type.test = 1,ref = hpca.ref,labels = hpca.ref$label.fine)
+table(hpca.main$pruned.labels)
+table(hpca.fine$pruned.labels)
+srat@meta.data$hpca.main   <- hpca.main$pruned.labels
+srat@meta.data$hpca.fine   <- hpca.fine$pruned.labels
+
+srat <- SetIdent(srat, value = "hpca.main")
+DimPlot(srat, label = T , repel = T, label.size = 3) + ggtitle('Tissue types Fibrolasts all')
+
+list_fibroblasts <- WhichCells(srat, idents = c( "Fibroblasts"))
+DimPlot(srat, label=F, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey")
+
+
+
+
+```
+
+
+Find markers for each cluster, each assigned cell type, and assigned fibroblasts cluster
+```{r}
+
+srat <- SetIdent(srat, value = "annotation")
+markers <- FindAllMarkers(srat)
+write.table(markers, file = file.path(data.folder, "/markers/markers_annotation.tsv"), sep = "\t", row.names = T, col.names = T, quote = FALSE )
+
+srat <- SetIdent(srat, value = "mycelltype")
+markers <- FindAllMarkers(srat)
+write.table(markers, file = file.path(data.folder, "/markers/markers_mycelltype.tsv"), sep = "\t", row.names = T, col.names = T, quote = FALSE )
+markers <- FindMarkers(srat, ident.1 = c("fibroblast"))
+write.table(markers, file = file.path(data.folder, "/markers/markers_fibroblast.tsv"), sep = "\t", row.names = T, col.names = T, quote = FALSE )
+
+srat <- SetIdent(srat, value = "fer_classification")
+markers <- FindAllMarkers(srat)
+write.table(markers, file = file.path(data.folder, "/markers/markers_fer_classification.tsv"), sep = "\t", row.names = T, col.names = T, quote = FALSE )
+
+```
+
+Check fibroblast markers
+```{r}
+for (gene in c("FAP", "SPARC", "PDPN", "PDGFRA", "COL15A1", "CXCL12", "SOD2", "PI16", "CD34", "C3", "OGN", "CCL19", "CXCL9", "CD74", "CXCL1", "CXCL2", "CXCL3", "CXCL12", "APOD", "CD48", "CD3D", "TMEM158", "VEGFA", "NOTCH3", "HEY1", "MMP9", "BMP8A", "RGS5", "MCAM", "TAGLN", "MMP11", "COL1A2", "COL10A1", "COL11A1", "KIF26B", "MKI67", "CDK1", "IDO1", "MMP1")){
+  print(FeaturePlot(srat, reduction = "umap", features = gene))
+}
+
+```
+
+
+And what happens if we only take what they defined as fibroblasts
+
+```{r}
+
+srat <- SetIdent(srat, value = "mycelltype")
+all.fibroblast.cl10 <- subset(x = srat, ident = c("fibroblast"))
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "mycelltype")
+DimPlot(all.fibroblast.cl10, label = F, repel = TRUE)
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "seurat_clusters")
+DimPlot(all.fibroblast.cl10, label = TRUE, repel = TRUE)
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "hpca.main")
+list_fibroblasts <- WhichCells(all.fibroblast.cl10, idents = c( "Fibroblasts"))
+DimPlot(all.fibroblast.cl10, label=F, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey")
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "orig.ident")
+DimPlot(all.fibroblast.cl10, label = F , repel = T, label.size = 3) + ggtitle('Sample origin')
+
+all.fibroblast.cl10 <- ScaleData(all.fibroblast.cl10, verbose = FALSE, )
+all.fibroblast.cl10 <- RunPCA(all.fibroblast.cl10, npcs = 50, verbose = FALSE)
+
+all.fibroblast.cl10 <- RunHarmony(all.fibroblast.cl10, 
+				group.by.vars = c("orig.ident"), 
+				reduction = "pca", reduction.save = "harmony")
+all.fibroblast.cl10 <- RunUMAP(all.fibroblast.cl10, reduction = "harmony", dims = 1:50)
+all.fibroblast.cl10 <- FindNeighbors(object = all.fibroblast.cl10, reduction = "harmony")
+all.fibroblast.cl10 <- FindClusters(all.fibroblast.cl10, resolution = c(0.2, 0.4, 0.6, 0.8, 1.0, 1.2))
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "seurat_clusters")
+DimPlot(all.fibroblast.cl10, reduction = "umap", label = TRUE, repel = TRUE)
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "hpca.main")
+DimPlot(all.fibroblast.cl10, reduction = "umap", label = TRUE, repel = TRUE) + theme(legend.position="none")
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "hpca.main")
+list_fibroblasts <- WhichCells(all.fibroblast.cl10, idents = c( "Fibroblasts"))
+DimPlot(all.fibroblast.cl10, reduction = "umap", label=F, cells.highlight= list(list_fibroblasts), cols.highlight = c("darkblue"), cols= "grey")
+
+# FeaturePlot(all.fibroblast.cl10, reduction = "umap", features = "CD105") ## Not available
+for (gene in c("FAP", "SPARC", "PDPN", "PDGFRA", "COL15A1", "CXCL12", "SOD2", "PI16", "CD34", "C3", "OGN", "CCL19", "CXCL9", "CD74", "CXCL1", "CXCL2", "CXCL3", "CXCL12", "APOD", "CD48", "CD3D", "TMEM158", "VEGFA", "NOTCH3", "HEY1", "MMP9", "BMP8A", "RGS5", "MCAM", "TAGLN", "MMP11", "COL1A2", "COL10A1", "COL11A1", "KIF26B", "MKI67", "CDK1", "IDO1", "MMP1")){
+  print(FeaturePlot(all.fibroblast.cl10, reduction = "umap", features = gene))
+}
+
+```
+
+
+```{r}
+
+all.fibroblast.cl10 <- SetIdent(all.fibroblast.cl10, value = "seurat_clusters")
+markers <- FindAllMarkers(all.fibroblast.cl10)
+write.table(markers, file = file.path(data.folder, "/markers/markers_fibroblast_clusters_onlyCluster10.tsv"), sep = "\t", row.names = T, col.names = T, quote = FALSE )
+
+```
+
+
+
+## 3. Map of expression in both types of data (whole tumor and fibroblasts) for indicated genes and signatures
+
+Get signatures and genes
+
+```{r}
+
+library(xlsx)
+setwd("/home/juliam/Documents/FernandoCalvo/scRNAseq_test/Signaures")
+
+my_signatures <- read.xlsx("genes and signatures Miguel ASPA project v3.xlsx", 3, header = T)
+
+# Genes not present: "LRRC15", "NOCHT3", "CTGF"
+my_genes <- c("ASPA", "NAT8L", "FOLH1", "NAALADL2", "RIMKLB", "ACSS1", "ACSS2", "ACLY", "PALLD", "DKK3", "LOXL2", "ACTG2", "INHBA", "POSTN", "TAGLN", "ACTA2", "THBS1", "COL1A1", "IL6", "IL1A", "DCN", "CXCL12", "TGFBI", "ITGA11", "IGFBP3", "LOX", "NOX4", "WNT10A", "ITGA8", "TGFB1", "TGFB2", "TGFB3", "TGFBR1", "TGFBR2", "TGFBR3", "WNT5A", "MYL9", "LIF", "CXCL1", "CXCL2", "CCL2", "CALD1", "CD74")
+
+setwd(wd)
+
+my_signatures <- my_signatures[2:904,]
+
+```
+
+
+Signature expression bladder
+
+```{r gene expression Bladder}
+
+DefaultAssay(srat) <- "RNA"
+
+Bladder.table <- data.frame(
+  cluster = srat$seurat_clusters,
+  annotation = srat$annotation,
+  fer_classification = srat$fer_classification,
+  prediction = srat$hpca.main
+)
+
+for (signature in colnames(my_signatures)){
+  signature_name <- signature
+  signature_genes <- my_signatures[signature]
+  marker_gene_list <- signature_genes[!is.na(signature_genes)]
+  
+  marker_gene_list <- list(unlist(marker_gene_list))
+  
+  srat <- AddModuleScore(srat, features = marker_gene_list, name = signature_name)
+  print(FeaturePlot(srat, features = paste0(signature_name,"1")))
+  
+  Bladder.table[signature_name] <- srat[[paste0(signature_name,"1")]]
+}
+
+for (gene_set in 0:(as.integer(length(my_genes) / 4))) {
+  print(FeaturePlot(srat, features = my_genes[(gene_set*4+1):min((gene_set*4+1)+3,length(my_genes))]))
+}
+
+for (gene in my_genes){
+  Bladder.table[gene] <- FetchData(srat, vars = gene)
+} 
+
+```
+
+
+
+Signature expression bladder fibroblasts
+
+```{r gene expression Bladder fibroblasts}
+
+DefaultAssay(all.fibroblast.cl10) <- "RNA"
+
+Bladder.fibroblast.table <- data.frame(
+  cluster = all.fibroblast.cl10$seurat_clusters,
+  annotation = all.fibroblast.cl10$annotation,
+  fer_classification = all.fibroblast.cl10$fer_classification,
+  prediction = all.fibroblast.cl10$hpca.main
+)
+
+for (signature in colnames(my_signatures)){
+  signature_name <- signature
+  signature_genes <- my_signatures[signature]
+  marker_gene_list <- signature_genes[!is.na(signature_genes)]
+  
+  marker_gene_list <- list(unlist(marker_gene_list))
+  
+  all.fibroblast.cl10 <- AddModuleScore(all.fibroblast.cl10, features = marker_gene_list, name = signature_name)
+  print(FeaturePlot(all.fibroblast.cl10, features = paste0(signature_name,"1")))
+  
+  Bladder.fibroblast.table[signature_name] <- all.fibroblast.cl10[[paste0(signature_name,"1")]]
+}
+
+for (gene_set in 0:(as.integer(length(my_genes) / 4))) {
+  print(FeaturePlot(all.fibroblast.cl10, features = my_genes[(gene_set*4+1):min((gene_set*4+1)+3,length(my_genes))]))
+}
+
+for (gene in my_genes){
+  Bladder.fibroblast.table[gene] <- FetchData(all.fibroblast.cl10, vars = gene)
+} 
+
+```
+
+
+## 4. Expression matrix (average) so we can generate a heatmap or graph (gene and signatures)
+
+I created the tables containing for every cell: normalised expression values per gene, signature value, cluster assigned, and celltype assigned.
+
+Bladder
+
+```{r heatmap Bladder}
+write.csv(Bladder.table, file="markers/Bladder.table.rethinkingclustering.csv")
+
+```
+
+Bladder fibroblast
+
+```{r heatmap Bladder fibroblast}
+
+write.csv(Bladder.fibroblast.table, file="markers/Bladder.fibroblast.table.rethinkingclustering.csv")
+
+```
+
+
+## 5. For the BLCA dataset that we have normal and cancer tissue, expression matrix for gene and signtures of fibroblasts from normal and tumor
+
+Added as extra field in previous tables.
