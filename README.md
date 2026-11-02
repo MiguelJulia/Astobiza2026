@@ -1,7 +1,7 @@
 # Astobiza2026
 Scripts for analysing RNAseq data, scRNAseq data, and plotting figures for the paper:
 
-Fibroblastic aspartoacylase suppresses TGFβ-mediated responses and cancer progression, Astobiza et al 2026. 
+Fibroblastic aspartoacylase suppresses TGFβ-mediated responses and cancer progression, Astobiza et al 2026, https://doi.org/10.1038/s41467-026-73002-6
 
 The repository is organised in the following manner:
 ```
